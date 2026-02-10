@@ -1,0 +1,370 @@
+
+-- =============================================================================
+-- -----------------------------------------------------------------------------
+-- PROJEKT:  	  DATENMODELLIERUNG im E-COMMERCE 
+-- Autor:    	  
+-- Datum:    	  2026-02-11
+-- Architektur: Um den Entwicklungsprozess realitätsnah abzubilden, wurde auf
+--  			      ein monolithisches Gesamtskript verzichtet. Die Ausführung 
+-- 			        erfolgt phasenweise, um strukturelle Abhängigkeiten korrekt 
+--  			      aufzulösen.
+-- -----------------------------------------------------------------------------
+-- =============================================================================
+
+
+/* INHALTSVERZEICHNIS
+   1. Initialisierung & Setup
+   2. Phase_2: Erarbeitungs- & Reflexionsphase
+      2.1 Tabellenstruktur (Basis-Schema)
+      2.2 Seed-Daten (Testdatensätze)
+      2.3 Integritätstests (Constraints & Foreign Keys)
+      2.4 Views & Analyse (Business Intelligence Definition)
+   3. Phase_3: Finalisierungsphase (Optimierung)
+      3.1 Refactoring (Schema-Migration & ENUM-Anpassung)
+      3.2 Trigger-Implementierung (Prozess-Automatisierung)
+      3.3 Validierung der Trigger-Logik (Funktionstest)
+   4. Endstatus Report & Validierung
+*/
+
+
+-- -----------------------------------------------------------------------------
+-- 1 INITIALISIERUNG
+-- -----------------------------------------------------------------------------
+CREATE DATABASE IF NOT EXISTS E_Commerce;			
+USE E_Commerce;
+
+
+-- =============================================================================
+-- -----------------------------------------------------------------------------
+-- 2 PHASE_2 - Erarbeitungs-/Reflexionsphase
+-- -----------------------------------------------------------------------------
+-- =============================================================================
+
+
+-- -----------------------------------------------------------------------------
+-- 2.1 TABELLENSTRUKTUR (BASIS-SCHEMA)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE customer (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE role (
+    role_id INT AUTO_INCREMENT PRIMARY KEY,
+    role_name ENUM('customer','support','logistics','admin') NOT NULL UNIQUE,
+    description LONGTEXT
+);
+
+CREATE TABLE user_role (
+    user_role_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    role_id INT NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customer(customer_id)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES role(role_id)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+    UNIQUE KEY unique_user_role (customer_id, role_id)
+);
+
+CREATE TABLE product (
+    product_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_name VARCHAR(150) NOT NULL,
+    description LONGTEXT,
+    price DECIMAL(10,2) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    order_number VARCHAR(20) NOT NULL UNIQUE,
+    status ENUM('created','paid','shipped','delivered','cancelled') NOT NULL DEFAULT 'created',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    shipped_at DATETIME DEFAULT NULL,
+    delivered_at DATETIME DEFAULT NULL,
+    cancelled_at DATETIME DEFAULT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customer(customer_id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+CREATE TABLE payment (
+    payment_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL UNIQUE,
+    amount DECIMAL(10,2) NOT NULL,
+    payment_method ENUM('credit_card','paypal','bank_transfer','other') NOT NULL DEFAULT 'other',
+    status ENUM('pending','paid','failed','refunded') NOT NULL DEFAULT 'pending',
+    paid_at DATETIME DEFAULT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+CREATE TABLE order_item (
+    order_item_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT UNSIGNED NOT NULL,
+    unit_price DECIMAL(10,2) NOT NULL,
+    total_price DECIMAL(12,2) GENERATED ALWAYS AS (quantity * unit_price) STORED,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id)
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES product(product_id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+
+-- -----------------------------------------------------------------------------
+-- 2.2 SEED-DATEN (TESTDATENSÄTZE)
+-- -----------------------------------------------------------------------------
+
+INSERT INTO customer (first_name, last_name, email) VALUES
+('Max','Mustermann','max@example.com'), ('Anna','Müller','anna@example.com'),
+('Peter','Schmidt','peter@example.com'), ('Laura','Meier','laura@example.com'),
+('Tom','Fischer','tom@example.com'), ('Lisa','Klein','lisa@example.com');
+
+INSERT INTO role (role_name, description) VALUES
+('customer','Standard Kunde'), ('support','Kundensupport'),
+('logistics','Lager und Versand'), ('admin','Administrator');
+
+INSERT INTO user_role (customer_id, role_id) VALUES
+(1,1),(2,1),(3,1),(4,1),(5,1),(6,1),(2,2),(5,3);
+
+INSERT INTO product (product_name, description, price) VALUES
+('Laptop','Gaming Laptop',1200.00), ('Maus','Wireless Mouse',25.50),
+('Tastatur','Mechanische Tastatur',75.00), ('Monitor','24 Zoll Monitor',150.00),
+('Headset','Gaming Headset',60.00), ('USB-Stick','32GB USB-Stick',10.00);
+
+INSERT INTO orders (customer_id, order_number, status) VALUES
+(1,'ORD001','created'), (2,'ORD002','paid'), (3,'ORD003','shipped'),
+(4,'ORD004','delivered'), (5,'ORD005','cancelled'), (6,'ORD006','created');
+
+INSERT INTO payment (order_id, amount, payment_method, status) VALUES
+(2,150.00,'paypal','paid'), (3,135.00,'bank_transfer','paid'),
+(4,210.00,'credit_card','paid'), (5,0.00,'other','refunded');
+
+INSERT INTO order_item (order_id, product_id, quantity, unit_price) VALUES
+(1,1,1,1200.00), (1,2,1,25.50), (2,3,2,75.00),
+(3,4,1,150.00), (4,5,3,60.00), (5,6,1,10.00), (6,2,2,25.50);
+
+
+-- -----------------------------------------------------------------------------
+-- 2.3 INTEGRITÄTSTESTS (CONSTRAINTS & FOREIGN KEYS)
+-- -----------------------------------------------------------------------------
+-- Validierung der Datensätze unter Berücksichtigung der Foreign Keys und Constraints
+
+-- 1a) Einfügen Kunde mit bestehender E-Mail (Erwartung: fehlschlagen)
+INSERT INTO customer (first_name,last_name,email) VALUES ('Max','Mustermann','max@example.com');
+
+-- 1b) Bestellposition mit nicht existierendem Produkt (Erwartung: fehlschlagen)
+INSERT INTO order_item (order_id, product_id, quantity, unit_price) VALUES (1,999,1,100.00);
+
+-- 1c) Gültigen neuen Kunden einfügen
+INSERT INTO customer (first_name,last_name,email) VALUES ('Julia','Schneider','julia@example.com');
+
+-- 2a) Bestellungen mit Gesamtsumme
+SELECT o.order_number,c.first_name,c.last_name,SUM(oi.total_price) AS total
+FROM orders o
+JOIN customer c ON o.customer_id=c.customer_id
+JOIN order_item oi ON o.order_id=oi.order_id
+GROUP BY o.order_id;
+
+-- 2b) Alle Zahlungen mit Status paid"
+SELECT p.payment_id,o.order_number,p.amount,p.status
+FROM payment p
+JOIN orders o ON p.order_id=o.order_id
+WHERE p.status='paid';
+
+-- 2c) Kunden mit Rollen
+SELECT c.first_name,c.last_name,r.role_name
+FROM customer c
+JOIN user_role ur ON c.customer_id=ur.customer_id
+JOIN role r ON ur.role_id=r.role_id;
+
+-- 2d) Verifizierung des aktuellen Datenbestands
+-- 4d) Status-Abfrage zur Verifizierung der Migration
+SELECT 'Kunden' AS Tabelle, COUNT(*) AS Anzahl FROM customer UNION
+SELECT 'Produkte', COUNT(*) FROM product UNION
+SELECT 'Bestellungen', COUNT(*) FROM orders UNION
+SELECT 'Bestellpositionen', COUNT(*) FROM order_item;
+
+-- 3a) Bestellstatus ändern
+UPDATE orders SET status='paid' WHERE order_number='ORD001';
+
+-- 3b) Preis einer Bestellposition ändern -> total_price automatisch
+UPDATE order_item SET unit_price=1300.00 WHERE order_item_id=1;
+
+-- 4a) Löschen Kunde (RESTRICT) - (Erwartung: fehlschlagen)
+DELETE FROM customer WHERE customer_id=1;
+
+-- 4b) Löschen Bestellung (ON DELETE CASCADE)
+DELETE FROM orders WHERE order_id=3;
+
+-- 5a) Ungültige Menge (Erwartung: fehlschlagen bei CHECK Constraints)
+INSERT INTO order_item(order_id,product_id,quantity,unit_price) VALUES (2,3,-1,75.00);
+
+-- 5b) Falscher ENUM-Wert (Erwartung: fehlschlagen)
+UPDATE orders SET status='processing' WHERE order_number='ORD002';
+
+-- 5c) NULL in Pflichtfeld (Erwartung: fehlschlagen)
+INSERT INTO product(product_name,price) VALUES (NULL,50.00);
+
+
+-- -----------------------------------------------------------------------------
+-- 2.4 VIEWS & ANALYSE (BUSINESS INTELLIGENCE DEFINITION)
+-- -----------------------------------------------------------------------------
+
+CREATE VIEW view_customer_revenue AS
+SELECT c.customer_id, CONCAT(c.first_name,' ',c.last_name) AS Kunde,
+SUM(oi.total_price) AS Gesamtumsatz
+FROM customer c
+JOIN orders o ON c.customer_id=o.customer_id
+JOIN order_item oi ON o.order_id=oi.order_id
+GROUP BY c.customer_id,c.first_name,c.last_name
+ORDER BY Gesamtumsatz DESC;
+
+CREATE VIEW view_order_status_report AS
+SELECT status AS Bestellstatus, COUNT(*) AS Anzahl_Bestellungen
+FROM orders
+GROUP BY status
+ORDER BY FIELD(status, 'created','paid','shipped','delivered','cancelled');
+
+-- Inspektion & Validierung
+SHOW CREATE VIEW view_order_status_report;
+SHOW CREATE VIEW view_customer_revenue;
+SELECT * FROM view_customer_revenue;
+SELECT * FROM view_order_status_report;
+EXPLAIN SELECT * FROM view_customer_revenue;
+
+
+-- =============================================================================
+-- -----------------------------------------------------------------------------
+-- 3 PHASE_3 - Finalisierungsphase (OPTIMIERUNG)
+-- -----------------------------------------------------------------------------
+-- =============================================================================
+
+
+-- -----------------------------------------------------------------------------
+-- 3.1 REFACTORING (SCHEMA-MIGRATION & ENUM-ANPASSUNG)
+-- -----------------------------------------------------------------------------
+-- Hinweis: Updates erfolgen vor der Trigger-Erstellung zur Vermeidung von Overhead
+
+-- Refactoring Tabelle 'orders'
+ALTER TABLE orders ADD COLUMN status_new VARCHAR(20);
+UPDATE orders SET status_new=CASE status
+    WHEN 'created' THEN 'created_at'
+    WHEN 'paid' THEN 'paid_at'
+    WHEN 'shipped' THEN 'shipped_at'
+    WHEN 'delivered' THEN 'delivered_at'
+    WHEN 'cancelled' THEN 'cancelled_at'
+END;
+ALTER TABLE orders DROP COLUMN status;
+ALTER TABLE orders CHANGE COLUMN status_new status
+ENUM('created_at','paid_at','shipped_at','delivered_at','cancelled_at') NOT NULL DEFAULT 'created_at';
+
+-- Refactoring Tabelle 'payment'
+ALTER TABLE payment ADD COLUMN status_new VARCHAR(20);
+UPDATE payment SET status_new=CASE status
+    WHEN 'pending' THEN 'pending_at'
+    WHEN 'paid' THEN 'paid_at'
+    WHEN 'failed' THEN 'failed_at'
+    WHEN 'refunded' THEN 'refunded_at'
+END;
+ALTER TABLE payment DROP COLUMN status;
+ALTER TABLE payment CHANGE COLUMN status_new status
+ENUM('pending_at','paid_at','failed_at','refunded_at') NOT NULL DEFAULT 'pending_at';
+
+-- View-Anpassung nach ENUM-Änderung
+CREATE OR REPLACE VIEW view_order_status_report AS
+SELECT status AS Bestellstatus, COUNT(*) AS Anzahl_Bestellungen
+FROM orders
+GROUP BY status
+ORDER BY FIELD(status,'created_at','paid_at','shipped_at','delivered_at','cancelled_at');
+
+
+-- -----------------------------------------------------------------------------
+-- 3.2 TRIGGER-IMPLEMENTIERUNG (PROZESS-AUTOMATISIERUNG)
+-- -----------------------------------------------------------------------------
+DELIMITER //
+
+CREATE TRIGGER after_payment_insert
+AFTER INSERT ON payment
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'pending_at' THEN
+        UPDATE orders SET status = 'created_at' WHERE order_id = NEW.order_id;
+    ELSEIF NEW.status = 'paid_at' THEN
+        UPDATE orders SET status = 'paid_at' WHERE order_id = NEW.order_id;
+    ELSEIF NEW.status = 'failed_at' THEN
+        UPDATE orders SET status = 'created_at' WHERE order_id = NEW.order_id;
+    ELSEIF NEW.status = 'refunded_at' THEN
+        UPDATE orders SET status = 'cancelled_at' WHERE order_id = NEW.order_id;
+    END IF;
+END;
+//
+
+DELIMITER ;
+
+DELIMITER //
+
+CREATE TRIGGER after_payment_update
+AFTER UPDATE ON payment
+FOR EACH ROW
+BEGIN
+    IF OLD.status <> NEW.status THEN
+        IF NEW.status = 'pending_at' THEN
+            UPDATE orders SET status = 'created_at' WHERE order_id = NEW.order_id;
+        ELSEIF NEW.status = 'paid_at' THEN
+            UPDATE orders SET status = 'paid_at' WHERE order_id = NEW.order_id;
+        ELSEIF NEW.status = 'failed_at' THEN
+            UPDATE orders SET status = 'created_at' WHERE order_id = NEW.order_id;
+        ELSEIF NEW.status = 'refunded_at' THEN
+            UPDATE orders SET status = 'cancelled_at' WHERE order_id = NEW.order_id;
+        END IF;
+    END IF;
+END;
+//
+
+DELIMITER ;
+
+
+-- -----------------------------------------------------------------------------
+-- 3.3 VALIDIERUNG DER TRIGGER-LOGIK (FUNKTIONSTESTS)
+-- -----------------------------------------------------------------------------
+
+-- Rücksetzung Testdatensatz order_id = 6
+DELETE FROM payment WHERE order_id = 6;
+UPDATE orders SET status = 'created_at' WHERE order_id = 6;
+
+-- a) INSERT: Beim Anlegen einer Zahlung wird der Status der Bestellung automatisch auf paid_at gesetzt.
+INSERT INTO payment(order_id, amount, payment_method, status) VALUES (6, 100.00, 'paypal', 'paid_at');
+SELECT order_id, status FROM orders WHERE order_id = 6;
+
+-- b) INSERT: Beim Anlegen einer Zahlung wird den Status der Bestellung automatisch auf paid_at gesetzt.
+DELETE FROM payment WHERE order_id = 6; 
+INSERT INTO payment(order_id, amount, payment_method, status) VALUES (6, 100.00, 'paypal', 'refunded_at');
+SELECT order_id, status FROM orders WHERE order_id = 6;
+
+-- c) UPDATE: Die Zahlung hat sich auf pending_at geändert und die Bestellung wird daraufhin zurück auf created_at gesetzt.
+UPDATE payment SET status = 'pending_at' WHERE order_id = 6;
+SELECT order_id, status FROM orders WHERE order_id = 6;
+
+-- d) UPDATE: Eine nachträgliche Änderung des Zahlungsstatus auf paid_at bestätigt, dass auch die Bestellung korrekt auf paid_at überführt wurde.
+UPDATE payment SET status = 'paid_at' WHERE order_id = 6;
+SELECT order_id, status FROM orders WHERE order_id = 6;
+
+
+-- -----------------------------------------------------------------------------
+-- 4 ENDSTATUS REPORT & VALIDIERUNG
+-- -----------------------------------------------------------------------------
+
+SELECT * FROM view_order_status_report;
+SHOW CREATE VIEW view_customer_revenue;
+EXPLAIN SELECT * FROM view_customer_revenue;
+
+
+-- EOF (End of File)
+
+
