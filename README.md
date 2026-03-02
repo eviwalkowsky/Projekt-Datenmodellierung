@@ -14,7 +14,7 @@ Professionelle Datenbanklösung zur Ablösung heterogener Datenquellen durch ein
 ### Datenmodell (ER-Diagramm)
 Das Modell sichert durch die konsequente Einhaltung der **3. Normalform (3NF)** maximale Datenintegrität und minimiert Redundanzen. 
 
-![ER-Diagramm](ER_Diagramm.png)  
+![ER-Diagramm](ER-Diagramm.png)
 *(Hinweis: Visualisierung der Tabellenbeziehungen und Constraints.)*
 
 * **Kunde (1:n) Bestellung:** Abbildung der Kundenhistorie.
