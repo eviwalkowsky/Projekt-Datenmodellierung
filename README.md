@@ -29,11 +29,19 @@ Das Modell sichert durch die konsequente Einhaltung der **3. Normalform (3NF)** 
 ---
 
 ## Implementierungs-Phasen
-1.  **Phase 2: Basis-Schema:** Definition der Tabellenstruktur, Datentypen und initiale Befüllung mit Testdaten (Seed-Daten).
-2.  **Phase 3: Optimierung & Finalisierung:**
-    * **Refactoring:** Migration der Status-Felder auf präzise ENUM-Werte.
-    * **Automatisierung:** Implementierung der Trigger-Logik für autonome Prozessabläufe.
-    * **Validierung:** Durchführung systematischer Funktionstests zur Verifizierung der Trigger-Aktionen.
+
+1. **Phase 1: Konzeption & Logisches Design:** * Analyse der Geschäftsprozesse (Kunden-Bestell-Logik).
+   * Erstellung des Entity-Relationship-Modells (ERM) in der 3. Normalform.
+   * Festlegung der Datentypen und Constraints (Primary/Foreign Keys).
+     
+2. **Phase 2: Basis-Schema:**
+   * Definition der Tabellenstruktur und Datentypen.
+   * Initiale Befüllung mit Testdaten (Seed-Daten).
+     
+3. **Phase 3: Optimierung & Finalisierung:**
+   * **Refactoring:** Migration der Status-Felder auf präzise ENUM-Werte.
+   * **Automatisierung:** Implementierung der Trigger-Logik für autonome Prozessabläufe.
+   * **Validierung:** Durchführung systematischer Funktionstests zur Verifizierung der Trigger-Aktionen.
 
 ---
 
@@ -42,11 +50,11 @@ Das Modell sichert durch die konsequente Einhaltung der **3. Normalform (3NF)** 
 1. **Repository klonen**
    ```bash
    git clone https://github.com/eviwalkowsky/Projekt-Datenmodellierung.git
-
+   
 2. **In das Verzeichnis wechseln**
    ```bash
    cd Projekt-Datenmodellierung
-
+   
 3. **Datenbank und Tabellen importieren**
    ```bash
    mysql -u root -p < Export-File
@@ -54,7 +62,6 @@ Das Modell sichert durch die konsequente Einhaltung der **3. Normalform (3NF)** 
 4. **In My-SQL einloggen**
    ```bash
    mysql -u root -p
-
 
 
 Autor: Evi Walkowsky | Matrikelnummer: 42304897
